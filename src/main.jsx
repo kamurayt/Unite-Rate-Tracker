@@ -5,18 +5,6 @@ import "./style.css";
 const STORAGE_KEY = "unite-rate-tracker-v2";
 const UPDATE_MINUTES = 3;
 
-const SAMPLE_MATCHES = [
-  {
-    id: "1",
-    date: "2026-05-26",
-    time: "15:12",
-    pokemon: "ゾロアーク",
-    result: "win",
-    diff: 9,
-    rating: 1551,
-  },
-];
-
 function signed(num) {
   return num > 0 ? `+${num}` : `${num}`;
 }
@@ -31,7 +19,9 @@ function buildDailyGroups(matches) {
 
   return Object.entries(grouped).map(([date, list]) => {
     const totalDiff = list.reduce((a, b) => a + b.diff, 0);
-    const finalRating = list[list.length - 1].rating;
+
+    const finalRating = list[list.length - 1]?.rating || 0;
+
     const startRating = finalRating - totalDiff;
 
     return {
@@ -45,18 +35,32 @@ function buildDailyGroups(matches) {
 }
 
 function App() {
-  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+  const saved = JSON.parse(
+    localStorage.getItem(STORAGE_KEY) || "null"
+  );
 
-  const [playerId, setPlayerId] = useState(saved?.playerId || "");
-  const [matches, setMatches] = useState(saved?.matches || SAMPLE_MATCHES);
+  const [playerId, setPlayerId] = useState(
+    saved?.playerId || ""
+  );
+
+  const [matches, setMatches] = useState(
+    saved?.matches || []
+  );
+
   const [status, setStatus] = useState("待機中");
 
-  const dailyGroups = useMemo(() => buildDailyGroups(matches), [matches]);
+  const dailyGroups = useMemo(
+    () => buildDailyGroups(matches),
+    [matches]
+  );
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ playerId, matches })
+      JSON.stringify({
+        playerId,
+        matches,
+      })
     );
   }, [playerId, matches]);
 
@@ -80,22 +84,32 @@ function App() {
           ? matches[matches.length - 1].rating
           : data.currentRating;
 
-      const diff = data.currentRating - previousRating;
+      const diff =
+        data.currentRating - previousRating;
+
+      const now = new Date();
 
       const match = {
-        id: data.latestMatch.id,
-        date: data.latestMatch.date,
-        time: data.latestMatch.time,
-        pokemon: data.latestMatch.pokemon,
+        id: Date.now().toString(),
+        date: `${now.getFullYear()}-${String(
+          now.getMonth() + 1
+        ).padStart(2, "0")}-${String(
+          now.getDate()
+        ).padStart(2, "0")}`,
+        time: `${String(now.getHours()).padStart(
+          2,
+          "0"
+        )}:${String(now.getMinutes()).padStart(
+          2,
+          "0"
+        )}`,
+        pokemon: "取得中",
         result: diff >= 0 ? "win" : "lose",
         diff,
         rating: data.currentRating,
       };
 
-      setMatches((prev) => {
-        if (prev.some((m) => m.id === match.id)) return prev;
-        return [...prev, match];
-      });
+      setMatches((prev) => [...prev, match]);
 
       setStatus(`更新成功 ${signed(diff)}`);
     } catch (e) {
@@ -104,9 +118,13 @@ function App() {
   }
 
   useEffect(() => {
-    const id = setInterval(updateCheck, UPDATE_MINUTES * 60 * 1000);
+    const id = setInterval(
+      updateCheck,
+      UPDATE_MINUTES * 60 * 1000
+    );
+
     return () => clearInterval(id);
-  });
+  }, []);
 
   return (
     <div className="app">
@@ -114,24 +132,31 @@ function App() {
 
       <input
         value={playerId}
-        onChange={(e) => setPlayerId(e.target.value)}
+        onChange={(e) =>
+          setPlayerId(e.target.value)
+        }
         placeholder="UniteAPI ID"
       />
 
-      <button onClick={updateCheck}>更新チェック</button>
+      <button onClick={updateCheck}>
+        更新チェック
+      </button>
 
       <p>{status}</p>
 
       {dailyGroups.map((day) => (
         <div className="day" key={day.date}>
           <h2>
-            {day.date} 開始 {day.startRating} → 最終 {day.finalRating}
+            {day.date} 開始 {day.startRating}
+            → 最終 {day.finalRating}
             ({signed(day.totalDiff)})
           </h2>
 
           {day.matches.map((m) => (
             <div className="match" key={m.id}>
-              {m.time} {m.pokemon} {signed(m.diff)} レート {m.rating}
+              {m.time} {m.pokemon}{" "}
+              {signed(m.diff)} レート{" "}
+              {m.rating}
             </div>
           ))}
         </div>
@@ -140,4 +165,6 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(
+  document.getElementById("root")
+).render(<App />);
