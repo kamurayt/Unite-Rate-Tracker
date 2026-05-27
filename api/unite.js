@@ -33,7 +33,11 @@ export default async function handler(req, res) {
       .replace(/<style[\s\S]*?<\/style>/gi, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ");
+      .replace(/&amp;/g, "&")
+      .replace(/&#x27;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/\s+/g, " ")
+      .trim();
 
     const mpMatches = [...text.matchAll(/([\d,]+)\s*MP/gi)]
       .map((m) => Number(m[1].replace(/,/g, "")))
@@ -51,17 +55,49 @@ export default async function handler(req, res) {
 
     const now = new Date();
 
+    let matchDate = `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    let matchTime = `${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes()
+    ).padStart(2, "0")}`;
+
+    const dateTimeMatch = text.match(
+      /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),\s+(\d{4})\s*[・·]\s*(\d{1,2}):(\d{2})/i
+    );
+
+    if (dateTimeMatch) {
+      const months = {
+        jan: "01",
+        feb: "02",
+        mar: "03",
+        apr: "04",
+        may: "05",
+        jun: "06",
+        jul: "07",
+        aug: "08",
+        sep: "09",
+        oct: "10",
+        nov: "11",
+        dec: "12",
+      };
+
+      const month = months[dateTimeMatch[1].slice(0, 3).toLowerCase()];
+      const day = String(dateTimeMatch[2]).padStart(2, "0");
+      const year = dateTimeMatch[3];
+
+      matchDate = `${year}-${month}-${day}`;
+      matchTime = `${String(dateTimeMatch[4]).padStart(2, "0")}:${dateTimeMatch[5]}`;
+    }
+
     return res.status(200).json({
       ok: true,
       currentRating,
       latestMatch: {
-        id: `${currentRating}-${Date.now()}`,
-        date: `${now.getFullYear()}-${String(
-          now.getMonth() + 1
-        ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
-        time: `${String(now.getHours()).padStart(2, "0")}:${String(
-          now.getMinutes()
-        ).padStart(2, "0")}`,
+        id: `${matchDate}-${matchTime}-${currentRating}`,
+        date: matchDate,
+        time: matchTime,
         pokemon: "取得中",
         result: "unknown",
       },
