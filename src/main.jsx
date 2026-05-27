@@ -2,16 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const STORAGE_KEY = "unite_rate_tracker_v3";
+const STORAGE_KEY = "unite_rate_tracker_v4";
 
 function getTodayKey() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function getTimeString() {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 
 function signed(num) {
@@ -39,7 +34,6 @@ function App() {
 
   function checkDailyReset() {
     const today = getTodayKey();
-
     if (history.length === 0) return;
 
     const latestDay = history[0].date;
@@ -80,10 +74,7 @@ function App() {
         id = id.split("/p/")[1].split(/[?#/]/)[0];
       }
 
-      const response = await fetch(
-        `/api/unite?player=${encodeURIComponent(id)}`
-      );
-
+      const response = await fetch(`/api/unite?player=${encodeURIComponent(id)}`);
       const data = await response.json();
 
       if (!data.ok) {
@@ -103,45 +94,49 @@ function App() {
       const today = getTodayKey();
 
       const character = data.latestMatch?.pokemon || "取得中";
-      const result =
-        diff > 0 ? "win" : diff < 0 ? "lose" : "unknown";
+      const result = diff > 0 ? "win" : diff < 0 ? "lose" : "unknown";
+
+      const matchDate = data.latestMatch?.date || today;
+      const matchTime = data.latestMatch?.time || "不明";
 
       const newLog = {
-        id: `${Date.now()}-${rating}`,
-        time: getTimeString(),
+        id: `${matchDate}-${matchTime}-${rating}`,
+        time: matchTime,
         rating,
         diff,
-        date: today,
+        date: matchDate,
         character,
         win: result === "win",
         result,
       };
 
       setHistory((prev) => {
-        const newHistory = [...prev, newLog];
-        return newHistory;
+        if (prev.some((item) => item.id === newLog.id)) return prev;
+        return [...prev, newLog];
       });
 
       setCurrentRating(rating);
 
-      setCharacterStats((prev) => {
-        const next = { ...prev };
+      if (!history.some((item) => item.id === newLog.id)) {
+        setCharacterStats((prev) => {
+          const next = { ...prev };
 
-        if (!next[character]) {
-          next[character] = {
-            wins: 0,
-            losses: 0,
-            totalDiff: 0,
-          };
-        }
+          if (!next[character]) {
+            next[character] = {
+              wins: 0,
+              losses: 0,
+              totalDiff: 0,
+            };
+          }
 
-        if (result === "win") next[character].wins += 1;
-        if (result === "lose") next[character].losses += 1;
+          if (result === "win") next[character].wins += 1;
+          if (result === "lose") next[character].losses += 1;
 
-        next[character].totalDiff += diff;
+          next[character].totalDiff += diff;
 
-        return next;
-      });
+          return next;
+        });
+      }
 
       setStatus(`更新成功 ${signed(diff)} / レート ${rating}`);
     } catch (e) {
