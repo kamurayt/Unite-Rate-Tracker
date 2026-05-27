@@ -6,30 +6,134 @@ body {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
 }
 
+h1 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
 input {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  margin-bottom: 12px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.mainBtn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #2563eb;
+  color: white;
+  font-size: 16px;
   margin-bottom: 12px;
 }
 
-button {
-  padding: 12px 20px;
+.resetBtn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #dc2626;
+  color: white;
+  font-size: 16px;
   margin-bottom: 20px;
 }
 
-.day {
+.summary {
+  margin-bottom: 20px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.card {
+  background: #111827;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.logItem {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.menuBtn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-size: 24px;
+  z-index: 1000;
+}
+
+.menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  max-width: 100%;
+  height: 100%;
   background: #111827;
   padding: 20px;
-  border-radius: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  z-index: 999;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
   margin-bottom: 20px;
 }
 
-.match {
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+.tabs button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 12px;
+  background: #1f2937;
+  color: white;
+}
+
+.activeTab {
+  background: #2563eb !important;
+}
+
+.menuCard {
+  background: #1f2937;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.menuCard h3 {
+  margin-top: 0;
+}
+
+@media (max-width: 600px) {
+  .logItem {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .menu {
+    width: 100%;
+  }
 }
