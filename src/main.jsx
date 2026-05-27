@@ -2,165 +2,390 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const STORAGE_KEY = "unite-rate-tracker-v2";
-const UPDATE_MINUTES = 3;
+const STORAGE_KEY = "unite_rate_tracker_v3";
 
-function signed(num) {
-  return num > 0 ? `+${num}` : `${num}`;
+function getTodayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function buildDailyGroups(matches) {
-  const grouped = {};
-
-  matches.forEach((m) => {
-    if (!grouped[m.date]) grouped[m.date] = [];
-    grouped[m.date].push(m);
-  });
-
-  return Object.entries(grouped).map(([date, list]) => {
-    const totalDiff = list.reduce((a, b) => a + b.diff, 0);
-
-    const finalRating = list[list.length - 1]?.rating || 0;
-
-    const startRating = finalRating - totalDiff;
-
-    return {
-      date,
-      matches: list,
-      totalDiff,
-      finalRating,
-      startRating,
-    };
-  });
+function getTimeString() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(
+    now.getMinutes()
+  ).padStart(2, "0")}`;
 }
 
 function App() {
-  const saved = JSON.parse(
-    localStorage.getItem(STORAGE_KEY) || "null"
-  );
+  const [apiId, setApiId] = useState("");
+  const [currentRating, setCurrentRating] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [dailyLogs, setDailyLogs] = useState([]);
+  const [characterStats, setCharacterStats] = useState({});
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState("daily");
 
-  const [playerId, setPlayerId] = useState(
-    saved?.playerId || ""
-  );
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
-  const [matches, setMatches] = useState(
-    saved?.matches || []
-  );
-
-  const [status, setStatus] = useState("待機中");
-
-  const dailyGroups = useMemo(
-    () => buildDailyGroups(matches),
-    [matches]
-  );
+    if (saved) {
+      setApiId(saved.apiId || "");
+      setCurrentRating(saved.currentRating || 0);
+      setHistory(saved.history || []);
+      setDailyLogs(saved.dailyLogs || []);
+      setCharacterStats(saved.characterStats || {});
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        playerId,
-        matches,
+        apiId,
+        currentRating,
+        history,
+        dailyLogs,
+        characterStats,
       })
     );
-  }, [playerId, matches]);
+  }, [apiId, currentRating, history, dailyLogs, characterStats]);
 
-  async function updateCheck() {
-    try {
-      setStatus("更新中...");
+  useEffect(() => {
+    checkDailyReset();
+  }, []);
 
-      const res = await fetch(
-        `/api/unite?player=${encodeURIComponent(playerId)}`
-      );
+  function checkDailyReset() {
+    const today = getTodayKey();
 
-      const data = await res.json();
+    if (history.length === 0) return;
 
-      if (!data.ok) {
-        setStatus(data.error);
-        return;
-      }
+    const latestDay = history[0].date;
 
-      const previousRating =
-        matches.length > 0
-          ? matches[matches.length - 1].rating
-          : data.currentRating;
+    if (latestDay !== today) {
+      const grouped = {};
 
-      const diff =
-        data.currentRating - previousRating;
+      history.forEach((item) => {
+        if (!grouped[item.date]) grouped[item.date] = [];
+        grouped[item.date].push(item);
+      });
 
-      const now = new Date();
+      const newDailyLogs = [...dailyLogs];
 
-      const match = {
-        id: Date.now().toString(),
-        date: `${now.getFullYear()}-${String(
-          now.getMonth() + 1
-        ).padStart(2, "0")}-${String(
-          now.getDate()
-        ).padStart(2, "0")}`,
-        time: `${String(now.getHours()).padStart(
-          2,
-          "0"
-        )}:${String(now.getMinutes()).padStart(
-          2,
-          "0"
-        )}`,
-        pokemon: "取得中",
-        result: diff >= 0 ? "win" : "lose",
-        diff,
-        rating: data.currentRating,
-      };
+      Object.keys(grouped).forEach((date) => {
+        const logs = grouped[date];
 
-      setMatches((prev) => [...prev, match]);
+        const start = logs[0]?.rating || 0;
+        const end = logs[logs.length - 1]?.rating || 0;
 
-      setStatus(`更新成功 ${signed(diff)}`);
-    } catch (e) {
-      setStatus("取得失敗");
+        newDailyLogs.unshift({
+          date,
+          start,
+          end,
+          diff: end - start,
+          logs,
+        });
+      });
+
+      setDailyLogs(newDailyLogs);
+      setHistory([]);
     }
   }
 
-  useEffect(() => {
-    const id = setInterval(
-      updateCheck,
-      UPDATE_MINUTES * 60 * 1000
-    );
+  async function fetchData() {
+    try {
+      let id = apiId.trim();
 
-    return () => clearInterval(id);
-  }, []);
+      if (id.includes("/p/")) {
+        id = id.split("/p/")[1];
+      }
+
+      const response = await fetch(
+        `https://uniteapi.dev/api/player/${id}`
+      );
+
+      const data = await response.json();
+
+      const rating =
+        data?.stats?.ranked?.overall?.rating ||
+        data?.rating ||
+        0;
+
+      const match =
+        data?.matches?.[0] ||
+        {};
+
+      const character =
+        match?.pokemon ||
+        match?.pokemon_name ||
+        "不明";
+
+      const win =
+        match?.win ||
+        false;
+
+      const previous =
+        currentRating;
+
+      const diff =
+        previous === 0
+          ? 0
+          : rating - previous;
+
+      const today = getTodayKey();
+
+      const newLog = {
+        time: getTimeString(),
+        rating,
+        diff,
+        date: today,
+        character,
+        win,
+      };
+
+      const updatedHistory = [
+        ...history,
+        newLog,
+      ];
+
+      setHistory(updatedHistory);
+      setCurrentRating(rating);
+
+      const stats = {
+        ...characterStats,
+      };
+
+      if (!stats[character]) {
+        stats[character] = {
+          wins: 0,
+          losses: 0,
+          totalDiff: 0,
+        };
+      }
+
+      if (win) {
+        stats[character].wins += 1;
+      } else {
+        stats[character].losses += 1;
+      }
+
+      stats[character].totalDiff += diff;
+
+      setCharacterStats(stats);
+    } catch (e) {
+      alert("取得失敗");
+      console.error(e);
+    }
+  }
+
+  function resetLogs() {
+    if (!confirm("記録を全削除しますか？")) return;
+
+    setHistory([]);
+    setDailyLogs([]);
+    setCharacterStats({});
+    setCurrentRating(0);
+  }
+
+  const todaySummary = useMemo(() => {
+    if (history.length === 0) {
+      return {
+        start: 0,
+        end: 0,
+        diff: 0,
+      };
+    }
+
+    const start = history[0].rating;
+    const end =
+      history[history.length - 1].rating;
+
+    return {
+      start,
+      end,
+      diff: end - start,
+    };
+  }, [history]);
 
   return (
     <div className="app">
+      <button
+        className="menuBtn"
+        onClick={() =>
+          setMenuOpen(!menuOpen)
+        }
+      >
+        ☰
+      </button>
+
       <h1>Unite Rate Tracker</h1>
 
       <input
-        value={playerId}
+        value={apiId}
         onChange={(e) =>
-          setPlayerId(e.target.value)
+          setApiId(e.target.value)
         }
-        placeholder="UniteAPI ID"
+        placeholder="UniteAPI URL or ID"
       />
 
-      <button onClick={updateCheck}>
+      <button
+        className="mainBtn"
+        onClick={fetchData}
+      >
         更新チェック
       </button>
 
-      <p>{status}</p>
+      <button
+        className="resetBtn"
+        onClick={resetLogs}
+      >
+        記録リセット
+      </button>
 
-      {dailyGroups.map((day) => (
-        <div className="day" key={day.date}>
-          <h2>
-            {day.date} 開始 {day.startRating}
-            → 最終 {day.finalRating}
-            ({signed(day.totalDiff)})
-          </h2>
+      <div className="summary">
+        更新成功{" "}
+        {todaySummary.diff > 0 ? "+" : ""}
+        {todaySummary.diff}
+      </div>
 
-          {day.matches.map((m) => (
-            <div className="match" key={m.id}>
-              {m.time} {m.pokemon}{" "}
-              {signed(m.diff)} レート{" "}
-              {m.rating}
+      <div className="card">
+        <h2>
+          {getTodayKey()} 開始{" "}
+          {todaySummary.start}
+          → 最終 {todaySummary.end}
+          (
+          {todaySummary.diff > 0
+            ? "+"
+            : ""}
+          {todaySummary.diff})
+        </h2>
+
+        {history
+          .slice()
+          .reverse()
+          .map((item, index) => (
+            <div
+              key={index}
+              className="logItem"
+            >
+              <div>
+                {item.time}{" "}
+                {item.diff > 0
+                  ? "+"
+                  : ""}
+                {item.diff}
+              </div>
+
+              <div>
+                レート {item.rating}
+              </div>
+
+              <div>
+                {item.character}
+              </div>
+
+              <div>
+                {item.win
+                  ? "勝利"
+                  : "敗北"}
+              </div>
             </div>
           ))}
+      </div>
+
+      {menuOpen && (
+        <div className="menu">
+          <div className="tabs">
+            <button
+              className={
+                tab === "daily"
+                  ? "activeTab"
+                  : ""
+              }
+              onClick={() =>
+                setTab("daily")
+              }
+            >
+              日別
+            </button>
+
+            <button
+              className={
+                tab === "character"
+                  ? "activeTab"
+                  : ""
+              }
+              onClick={() =>
+                setTab("character")
+              }
+            >
+              キャラ別
+            </button>
+          </div>
+
+          {tab === "daily" && (
+            <div>
+              {dailyLogs.map(
+                (day, index) => (
+                  <div
+                    className="menuCard"
+                    key={index}
+                  >
+                    <h3>
+                      {day.date}
+                    </h3>
+
+                    <p>
+                      {day.start} →
+                      {day.end}
+                    </p>
+
+                    <p>
+                      {day.diff > 0
+                        ? "+"
+                        : ""}
+                      {day.diff}
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {tab === "character" && (
+            <div>
+              {Object.entries(
+                characterStats
+              ).map(
+                ([name, stat]) => (
+                  <div
+                    className="menuCard"
+                    key={name}
+                  >
+                    <h3>{name}</h3>
+
+                    <p>
+                      {stat.wins}勝{" "}
+                      {stat.losses}敗
+                    </p>
+
+                    <p>
+                      レート増減{" "}
+                      {stat.totalDiff >
+                      0
+                        ? "+"
+                        : ""}
+                      {stat.totalDiff}
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
