@@ -22,17 +22,32 @@ export default async function handler(req, res) {
     if (!response.ok) {
       return res.status(response.status).json({
         ok: false,
-        error: "UniteAPI取得失敗",
+        error: `UniteAPI取得失敗 ${response.status}`,
       });
     }
 
     const html = await response.text();
 
-    const mpMatch = html.match(/([\d,]+)\s*MP/i);
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ");
 
-    const currentRating = mpMatch
-      ? Number(mpMatch[1].replace(/,/g, ""))
-      : null;
+    const mpMatches = [...text.matchAll(/([\d,]+)\s*MP/gi)]
+      .map((m) => Number(m[1].replace(/,/g, "")))
+      .filter((n) => n >= 100);
+
+    const currentRating =
+      mpMatches.length > 0 ? Math.max(...mpMatches) : null;
+
+    if (!currentRating) {
+      return res.status(422).json({
+        ok: false,
+        error: "レートMPを取得できませんでした",
+      });
+    }
 
     const now = new Date();
 
@@ -40,7 +55,7 @@ export default async function handler(req, res) {
       ok: true,
       currentRating,
       latestMatch: {
-        id: Date.now().toString(),
+        id: `${currentRating}-${Date.now()}`,
         date: `${now.getFullYear()}-${String(
           now.getMonth() + 1
         ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
